@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RPG Runner - Fixed & Stable</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; background-color: #000; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+<script>
+const SCREEN_WIDTH = window.innerWidth;
+const SCREEN_HEIGHT = window.innerHeight;
+const GROUND_Y = SCREEN_HEIGHT * 0.82; 
+
+let stats = {
+    livello: 1, xp: 0, xpNext: 100, salute: 100, saluteMax: 100, stamina: 50, staminaMax: 50,
+    armatura: 5, attacco: 12, forza: 5, destrezza: 5, fortuna: 5, carisma: 5,
+    monete: 100, pozioni: 3, pozioneCura: 35, heritage: null, classe: null
+};
+
+let equip = { CAPO: null, MANTELLO: null, COLLANA: null, TORSO: null, MANI: null, ANELLO1: null, ANELLO2: null, PANTALONI: null, ARMA: null };
+let inventario = []; 
+let gameStarted = false, isRunning = false, nodeQueue = [];
+let specialiIncontrati = 0, biomaCorrente = "Pianura", pressoMercante = false;
+let bgGroup, player, statsTxt, healthBar, staminaBar;
+
+const config = {
+    type: Phaser.AUTO, width: SCREEN_WIDTH, height: SCREEN_HEIGHT,
+    backgroundColor: '#000', parent: 'game-container',
+    scene: { preload: preload, create: create, update: update }
+};
+new Phaser.Game(config);
+
+function preload() {}
+
+function create() {
+    disegnaUmanoide(this, 'hero', 0x4444ff, 200, true);
+    disegnaUmanoide(this, 'mob', 0xff4444, 100, false);
+    bgGroup = this.add.group();
+    mostraSelezioneClasse(this);
+}
+
+function disegnaUmanoide(scene, tag, color, height, isHero) {
+    const w = height * 0.45;
+    const g = scene.make.graphics({ x: 0, y: 0, add: false });
+    g.fillStyle(0x000000, 0.3); g.fillEllipse(w / 2, height, w, 15);
+    g.fillStyle(0x222222); g.fillRect(w * 0.2, height * 0.75, w * 0.2, height * 0.25);
+    g.fillRect(w * 0.6, height * 0.75, w * 0.2, height * 0.25);
+    g.fillStyle(color);
+    if (isHero) g.fillRect(w * 0.15, height * 0.3, w * 0.7, height * 0.45);
+    else g.fillTriangle(w*0.05, height*0.75, w*0.95, height*0.75, w*0.5, height*0.15);
+    g.fillStyle(0xffdbac); g.fillRect(w * 0.05, height * 0.35, w * 0.12, height * 0.4);
+    if (isHero) {
+        g.fillRect(w * 0.83, height * 0.35, w * 0.12, height * 0.2);
+        g.fillStyle(0xcccccc); g.fillRect(w * 0.85, height * 0.05, 12, height * 0.35);
+        g.fillStyle(0x8b4513); g.fillRect(w * 0.75, height * 0.38, 30, 8);
+        g.fillStyle(0x553311); g.fillRect(w * 0.86, height * 0.42, 10, 15);
+    } else { g.fillRect(w * 0.83, height * 0.35, w * 0.12, height * 0.55); }
+    g.fillStyle(0xffdbac); g.fillRect(w/2 - 20, 5, 40, 40);
+    g.fillStyle(0x000000); g.fillRect(w/2 - 12, 18, 6, 6); g.fillRect(w/2 + 6, 18, 6, 6);
+    g.generateTexture(tag, w + 30, height + 10);
+}
+
+function aggiornaAmbiente(scene) {
+    bgGroup.clear(true, true);
+    const biomiData = {
+        "Pianura":  { sky: 0x87ceeb, ground: 0x228b22, decor: "ALBERO" },
+        "Mare":     { sky: 0x00bfff, ground: 0x1e90ff, decor: "ONDA" },
+        "Montagna": { sky: 0x4682b4, ground: 0x808080, decor: "PICCO" },
+        "Foresta":  { sky: 0x004400, ground: 0x002200, decor: "PINO" },
+        "Cimitero": { sky: 0x111111, ground: 0x333333, decor: "LAPIDE" },
+        "Dungeon":  { sky: 0x000000, ground: 0x222222, decor: "MURO" },
+        "Castello": { sky: 0x2c3e50, ground: 0x34495e, decor: "COLONNA" },
+        "Deserto":  { sky: 0xffcc33, ground: 0xd2b48c, decor: "CACTUS" }
+    };
+    const data = biomiData[biomaCorrente];
+    bgGroup.add(scene.add.rectangle(0, 0, SCREEN_WIDTH, GROUND_Y, data.sky).setOrigin(0).setDepth(0));
+    bgGroup.add(scene.add.rectangle(0, GROUND_Y, SCREEN_WIDTH, SCREEN_HEIGHT-GROUND_Y, data.ground).setOrigin(0).setDepth(5));
+}
+
+function pulisciInterfaccia(scene) { scene.children.list.filter(c => c.depth >= 10).forEach(c => c.destroy()); }
+
+function mostraSelezioneClasse(scene) {
+    pulisciInterfaccia(scene);
+    const classi = [
+        {n: "GUERRIERO", d: "ATK +6, Forza +3", s: {forza:8, destrezza:4, carisma:3, fortuna:3, attacco:18}},
+        {n: "LADRO", d: "Fortuna +3, Destrezza +3", s: {forza:4, destrezza:8, carisma:5, fortuna:8, attacco:12}},
+        {n: "CHIERICO", d: "Carisma +3, Armatura +2", s: {forza:5, destrezza:3, carisma:8, fortuna:5, attacco:12, armatura: 7}}
+    ];
+    scene.add.text(SCREEN_WIDTH/2, 80, "CLASSE", {fontSize:'24px'}).setOrigin(0.5).setDepth(11);
+    classi.forEach((c, i) => {
+        let b = scene.add.text(SCREEN_WIDTH/2, 220+(i*110), `${c.n}\n${c.d}`, {backgroundColor:'#222', padding:15, align:'center'}).setOrigin(0.5).setInteractive().setDepth(11);
+        b.on('pointerdown', () => { Object.assign(stats, c.s); stats.classe = c.n; mostraSelezioneHeritage(scene); });
+    });
+}
+
+function mostraSelezioneHeritage(scene) {
+    pulisciInterfaccia(scene);
+    scene.add.text(SCREEN_WIDTH/2, 100, "RETAGGIO FAMILIARE").setOrigin(0.5).setDepth(11);
+    ["FORZA", "DESTREZZA", "FORTUNA", "CARISMA"].forEach((o, i) => {
+        scene.add.text(SCREEN_WIDTH/2, 220+(i*80), o, {backgroundColor:'#333', padding:15}).setOrigin(0.5).setInteractive().setDepth(11)
+        .on('pointerdown', () => { stats.heritage = o.toLowerCase(); stats[stats.heritage] += 2; schermataPunti(scene, 5, true); });
+    });
+}
+
+function schermataPunti(scene, puntiDaAssegnare, startCheck) {
+    pulisciInterfaccia(scene);
+    scene.add.rectangle(SCREEN_WIDTH/2, SCREEN_HEIGHT/2, SCREEN_WIDTH, SCREEN_HEIGHT, 0x000, 0.9).setDepth(50);
+    const t = scene.add.text(SCREEN_WIDTH/2, 80, startCheck ? "PUNTI INIZIALI" : "LEVEL UP!", {fontSize:'24px', fill:'#ff0'}).setOrigin(0.5).setDepth(51);
+    let r = puntiDaAssegnare;
+    const rTxt = scene.add.text(SCREEN_WIDTH/2, 130, `Punti rimasti: ${r}`).setOrigin(0.5).setDepth(51);
+    
+    ["FORZA", "DESTREZZA", "FORTUNA", "CARISMA"].forEach((s, i) => {
+        let btn = scene.add.text(SCREEN_WIDTH/2, 220+(i*70), `[+] ${s}: ${stats[s.toLowerCase()]}`, {backgroundColor:'#222', padding:10}).setOrigin(0.5).setInteractive().setDepth(51);
+        btn.on('pointerdown', () => { 
+            if(r > 0) { 
+                stats[s.toLowerCase()]++; r--; 
+                rTxt.setText(`Punti rimasti: ${r}`); 
+                btn.setText(`[+] ${s}: ${stats[s.toLowerCase()]}`);
+                if(r === 0) setTimeout(() => { if(startCheck) avviaGioco(scene); else riprendi(scene); }, 500);
+            } 
+        });
+    });
+}
+
+function avviaGioco(scene) {
+    pulisciInterfaccia(scene);
+    gameStarted = true; isRunning = true;
+    aggiornaAmbiente(scene);
+    player = scene.add.sprite(120, GROUND_Y, 'hero').setOrigin(0.5, 1).setDepth(7);
+    scene.tweens.add({ targets: player, scaleY: 0.97, duration: 900, yoyo: true, repeat: -1 });
+
+    let uiY = GROUND_Y + 15;
+    statsTxt = scene.add.text(15, uiY, '', { fontSize: '13px', fill: '#0f0' }).setDepth(10);
+    healthBar = scene.add.rectangle(15, uiY + 45, 180, 8, 0xff0000).setOrigin(0, 0.5).setDepth(10);
+    staminaBar = scene.add.rectangle(15, uiY + 58, 180, 6, 0xffff00).setOrigin(0, 0.5).setDepth(10);
+    
+    scene.add.text(SCREEN_WIDTH - 60, uiY + 40, "[ZAINO]", { backgroundColor: '#222', padding: 10 }).setOrigin(0.5).setInteractive().setDepth(10).on('pointerdown', () => mostraZaino(scene));
+    for(let i=0; i<3; i++) aggiungiNodo(scene);
+}
+
+function aggiungiNodo(scene) {
+    let roll = Math.random();
+    let tipo = (specialiIncontrati >= 4) ? "BIVIO" : (roll < 0.15 ? "MERCANTE" : roll < 0.3 ? "TESORO" : "MOSTRO");
+    if(tipo === "BIVIO") specialiIncontrati = 0; else if(tipo === "MERCANTE" || tipo === "TESORO") specialiIncontrati++;
+    let xPos = nodeQueue.length === 0 ? SCREEN_WIDTH + 300 : nodeQueue[nodeQueue.length-1].x + 450;
+    let obj = (tipo === "MOSTRO") ? scene.add.sprite(xPos, GROUND_Y, 'mob').setOrigin(0.5, 1) : scene.add.rectangle(xPos, GROUND_Y - 30, 50, 50, 0xffff00);
+    obj.setDepth(7).tipoRpg = tipo;
+    nodeQueue.push(obj);
+}
+
+function update() {
+    if (!gameStarted || !isRunning) return;
+    nodeQueue.forEach(n => { n.x -= 4; if (n.x <= 120) { let node = nodeQueue.shift(); gestisciIncontro(this, node.tipoRpg); node.destroy(); aggiungiNodo(this); } });
+    if(stats.stamina < stats.staminaMax) stats.stamina += 0.2;
+    healthBar.width = Math.max(0, 180 * (stats.salute / stats.saluteMax));
+    staminaBar.width = Math.max(0, 180 * (stats.stamina / stats.staminaMax));
+    statsTxt.setText(`LVL:${stats.livello} HP:${Math.floor(stats.salute)} ORO:${stats.monete} POZ:${stats.pozioni}`);
+}
+
+function gestisciIncontro(scene, tipo) {
+    isRunning = false; pulisciInterfaccia(scene);
+    scene.add.rectangle(SCREEN_WIDTH/2, SCREEN_HEIGHT/2, SCREEN_WIDTH, SCREEN_HEIGHT, 0x000, 0.7).setDepth(20);
+    if (tipo === "MOSTRO") combat(scene);
+    else if (tipo === "MERCANTE") {
+        pressoMercante = true;
+        scene.add.text(SCREEN_WIDTH/2, 150, "MERCANTE").setOrigin(0.5).setDepth(21);
+        scene.add.text(SCREEN_WIDTH/2, 280, "[ NEGOZIO ]", {backgroundColor:'#050', padding:20}).setOrigin(0.5).setInteractive().setDepth(21).on('pointerdown', () => mostraZaino(scene));
+        scene.add.text(SCREEN_WIDTH/2, 420, "[ PROSEGUI ]", {backgroundColor:'#222', padding:15}).setOrigin(0.5).setInteractive().setDepth(21).on('pointerdown', () => { pressoMercante=false; riprendi(scene); });
+    } else if (tipo === "BIVIO") {
+        scene.add.text(SCREEN_WIDTH/2, 150, "SCEGLI VIA").setOrigin(0.5).setDepth(21);
+        ["Mare", "Deserto"].forEach((m,i)=>{
+            scene.add.text(SCREEN_WIDTH/2, 280+(i*100), `[ ${m} ]`, {backgroundColor:'#222', padding:15}).setOrigin(0.5).setInteractive().setDepth(21).on('pointerdown', () => { biomaCorrente=m; aggiornaAmbiente(scene); riprendi(scene); });
+        });
+    } else mostraLoot(scene, generaLoot(true));
+}
+
+function riprendi(scene) { pulisciInterfaccia(scene); isRunning = true; }
+
+function combat(scene) {
+    let hpM = 40 + (stats.livello * 15);
+    const log = scene.add.text(SCREEN_WIDTH/2, 180, "NEMICO APPARSO!", {align:'center'}).setOrigin(0.5).setDepth(21);
+    const b1 = scene.add.text(SCREEN_WIDTH/2, 320, "[ ATTACCA ]", {backgroundColor:'#600', padding:20}).setOrigin(0.5).setInteractive().setDepth(21);
+    
+    b1.on('pointerdown', () => {
+        // Calcolo rapido per evitare freeze
+        let dP = (stats.attacco + stats.forza) * (Math.random() < stats.fortuna*0.05 ? 2 : 1);
+        let dM = Math.max(3, (10 + stats.livello*2) - stats.armatura);
+        
+        hpM -= dP;
+        stats.salute -= dM;
+        
+        if(stats.salute <= 0) location.reload();
+        else {
+            stats.xp += 40;
+            pulisciInterfaccia(scene);
+            if(stats.xp >= stats.xpNext) { stats.xp -= stats.xpNext; stats.xpNext = Math.floor(stats.xpNext*1.4); schermataPunti(scene, 2, false); }
+            else mostraLoot(scene, generaLoot(true));
+        }
+    });
+}
+
+function generaLoot(garantito) {
+    const slots = ["CAPO", "TORSO", "ARMA", "PANTALONI", "ANELLO1"];
+    const s = slots[Phaser.Math.Between(0, slots.length-1)];
+    const raro = Math.random() > 0.8;
+    return { nome: s+(raro?"+":""), tipo: s, bonus: (raro?12:5), stat: (s==="ARMA"?"attacco":"armatura"), color: (raro?'#f0f':'#fff'), val: raro?70:25 };
+}
+
+function mostraLoot(scene, item) {
+    pulisciInterfaccia(scene);
+    scene.add.text(SCREEN_WIDTH/2, 250, `TROVATO: ${item.nome}`, {fill:item.color}).setOrigin(0.5).setDepth(31);
+    scene.add.text(SCREEN_WIDTH/2, 380, "[ RACCOGLI ]", {backgroundColor:'#0f0', color:'#000', padding:15}).setOrigin(0.5).setInteractive().setDepth(31).on('pointerdown', () => { if(inventario.length<10) inventario.push(item); riprendi(scene); });
+    scene.add.text(SCREEN_WIDTH/2, 480, "[ LASCIA ]").setOrigin(0.5).setInteractive().setDepth(31).on('pointerdown', () => riprendi(scene));
+}
+
+function mostraZaino(scene) {
+    pulisciInterfaccia(scene);
+    scene.add.rectangle(SCREEN_WIDTH/2, SCREEN_HEIGHT/2, SCREEN_WIDTH, SCREEN_HEIGHT, 0x000, 0.95).setDepth(40);
+    
+    // Info e Pozioni
+    scene.add.text(20, 20, `ORO: ${stats.monete} | POZIONI: ${stats.pozioni}`, {fill:'#ff0'}).setDepth(41);
+    if(stats.pozioni > 0) {
+        scene.add.text(20, 60, "[ USA POZIONE ]", {backgroundColor:'#600', padding:10}).setDepth(41).setInteractive().on('pointerdown', () => {
+            stats.salute = Math.min(stats.saluteMax, stats.salute + stats.pozioneCura); stats.pozioni--; mostraZaino(scene);
+        });
+    }
+
+    const gearPos = [{s:"CAPO", y:150}, {s:"TORSO", y:230}, {s:"PANTALONI", y:310}, {s:"ARMA", y:390}];
+    gearPos.forEach(g => {
+        let btn = scene.add.text(50, g.y, `${g.s}: ${equip[g.s] ? equip[g.s].nome : 'Vuoto'}`, {backgroundColor:'#222', padding:10}).setDepth(41).setInteractive();
+        btn.on('pointerdown', () => { if(equip[g.s] && !pressoMercante) { inventario.push(equip[g.s]); stats[equip[g.s].stat] -= equip[g.s].bonus; equip[g.s]=null; mostraZaino(scene); } });
+    });
+
+    // Inventario
+    inventario.forEach((item, i) => {
+        let x = SCREEN_WIDTH/2 + (i%2 * 140), y = 150 + (Math.floor(i/2) * 60);
+        let txt = scene.add.text(x, y, `[${item.nome}]`, {color:item.color, backgroundColor:'#111', padding:5}).setDepth(41).setInteractive();
+        txt.on('pointerdown', () => {
+            if(pressoMercante) { stats.monete += item.val; inventario.splice(i,1); mostraZaino(scene); }
+            else {
+                if(equip[item.tipo]) { let old=equip[item.tipo]; stats[old.stat]-=old.bonus; inventario.push(old); }
+                equip[item.tipo]=item; stats[item.stat]+=item.bonus; inventario.splice(i,1); mostraZaino(scene);
+            }
+        });
+    });
+
+    scene.add.text(SCREEN_WIDTH/2, SCREEN_HEIGHT-40, "[ CHIUDI ]", {backgroundColor:'#444', padding:10}).setOrigin(0.5).setInteractive().setDepth(41).on('pointerdown', () => { if(pressoMercante) gestisciIncontro(scene, "MERCANTE"); else riprendi(scene); });
+}
+</script>
+</body>
+</html>
