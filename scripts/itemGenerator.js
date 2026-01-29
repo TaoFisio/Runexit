@@ -4,15 +4,16 @@ const generateItem = (level) => {
     let affixCount = 0;
     let rarityMult = 1;
 
-    if (randRarity < 0.002) { rarity = "SET"; affixCount = 3; rarityMult = 4; }
-    else if (randRarity < 0.01) { rarity = "LEGENDARY"; affixCount = 3; rarityMult = 3.5; }
-    else if (randRarity < 0.05) { rarity = "EPIC"; affixCount = 2; rarityMult = 2.5; }
-    else if (randRarity < 0.15) { rarity = "RARE"; affixCount = 2; rarityMult = 1.8; }
-    else if (randRarity < 0.40) { rarity = "UNCOMMON"; affixCount = 1; rarityMult = 1.3; }
-    else { affixCount = Math.random() > 0.8 ? 1 : 0; }
+    // Sistema rarità migliorato
+    if (randRarity < 0.01) { rarity = "SET"; affixCount = 3; rarityMult = 5; }
+    else if (randRarity < 0.03) { rarity = "LEGENDARY"; affixCount = 3; rarityMult = 4; }
+    else if (randRarity < 0.10) { rarity = "EPIC"; affixCount = 2; rarityMult = 3; }
+    else if (randRarity < 0.25) { rarity = "RARE"; affixCount = 2; rarityMult = 2; }
+    else if (randRarity < 0.50) { rarity = "UNCOMMON"; affixCount = 1; rarityMult = 1.5; }
 
     const slots = Object.keys(ITEM_DB.armors);
-    const isWeapon = Math.random() > 0.6;
+    // Aumentata probabilità accessori (anelli/collane)
+    const isWeapon = Math.random() > 0.5; 
     let type, category, slot;
 
     if (isWeapon) {
@@ -25,25 +26,26 @@ const generateItem = (level) => {
         type = ITEM_DB.armors[slot][Math.floor(Math.random() * ITEM_DB.armors[slot].length)];
     }
 
-    const qualityIdx = Math.min(ITEM_DB.qualities.length - 1, Math.floor(level / 2.5));
+    const qualityIdx = Math.min(ITEM_DB.qualities.length - 1, Math.floor(level / 3));
     const quality = ITEM_DB.qualities[qualityIdx];
-    const requirementValue = level * 5; 
-
-    const suffixKey = Object.keys(ITEM_DB.suffixes)[Math.floor(Math.random() * Object.keys(ITEM_DB.suffixes).length)];
-    const suffix = ITEM_DB.suffixes[suffixKey];
-    let name = `${quality} ${type} ${suffix}`;
     
+    // Nomi dinamici
+    const suffixKey = Object.keys(ITEM_DB.suffixes)[Math.floor(Math.random() * Object.keys(ITEM_DB.suffixes).length)];
+    let name = `${quality} ${type} ${ITEM_DB.suffixes[suffixKey]}`;
     if (rarity === "SET" || rarity === "LEGENDARY") {
-        const lore = ITEM_DB.loreNames[Math.floor(Math.random() * ITEM_DB.loreNames.length)];
-        name = `${type} ${lore} (${rarity})`;
+        name = `${type} ${ITEM_DB.loreNames[Math.floor(Math.random() * ITEM_DB.loreNames.length)]}`;
     }
+
+    // CALCOLO POTERE REALE
+    const basePower = Math.floor((level * 5) * rarityMult + (Math.random() * level));
+    const sellPrice = Math.floor(basePower * 2.5);
 
     const itemAffixes = [];
     for (let i = 0; i < affixCount; i++) {
         const aff = ITEM_DB.affixes[Math.floor(Math.random() * ITEM_DB.affixes.length)];
-        const baseBonus = 5 + (Math.random() * 5);
-        const finalValue = Math.floor(baseBonus * (1 + (level / 10)) * rarityMult);
-        itemAffixes.push({ ...aff, value: finalValue });
+        // Il bonus affisso ora scala seriamente con livello e rarità
+        const val = Math.floor((5 + (Math.random() * 10)) * (1 + level/10) * (rarityMult/2));
+        itemAffixes.push({ ...aff, value: val });
     }
 
     return {
@@ -51,10 +53,10 @@ const generateItem = (level) => {
         name, slot, rarity, level,
         requirement: {
             stat: category === "DEX" ? "DEX" : (category === "STR" ? "STR" : "SAG"),
-            value: requirementValue
+            value: level * 4
         },
-        basePower: Math.floor(level * 2 * rarityMult),
-        affixes: itemAffixes,
-        isTwoHanded: category === "TWO_HANDED"
+        basePower,
+        sellPrice,
+        affixes: itemAffixes
     };
 };
