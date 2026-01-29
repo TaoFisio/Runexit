@@ -8,6 +8,7 @@ const generateItem = (level) => {
     else if (randRarity < 0.10) { rarity = "LEGENDARY"; affixCount = 3; rarityMult = 4; }
     else if (randRarity < 0.25) { rarity = "EPIC"; affixCount = 2; rarityMult = 2.8; }
     else if (randRarity < 0.50) { rarity = "RARE"; affixCount = 2; rarityMult = 1.8; }
+    else if (randRarity < 0.75) { rarity = "UNCOMMON"; affixCount = 1; rarityMult = 1.3; }
 
     const armorSlots = Object.keys(ITEM_DB.armors);
     const randType = Math.random();
@@ -30,6 +31,10 @@ const generateItem = (level) => {
     const suffixKey = Object.keys(ITEM_DB.suffixes)[Math.floor(Math.random() * Object.keys(ITEM_DB.suffixes).length)];
     let name = `${ITEM_DB.qualities[qualityIdx]} ${type} ${ITEM_DB.suffixes[suffixKey]}`;
     
+    if (rarity === "SET" || rarity === "LEGENDARY") {
+        name = `${type} ${ITEM_DB.loreNames[Math.floor(Math.random() * ITEM_DB.loreNames.length)]}`;
+    }
+
     const basePower = Math.floor((level * 8) * rarityMult + 10);
     const sellPrice = Math.floor(basePower * 2.5);
 
@@ -44,6 +49,7 @@ const generateItem = (level) => {
         id: Math.random().toString(36).substr(2, 9),
         name, slot, rarity, level,
         requirement: { stat: "STR", value: level * 2 },
-        basePower, sellPrice, affixes: itemAffixes
+        basePower, sellPrice, 
+        affixes: itemAffixes // Sempre presente
     };
 };
