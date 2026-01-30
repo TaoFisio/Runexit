@@ -1,100 +1,61 @@
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RPG Loot & Shop Test</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <script src="data/itemDB.js"></script>
-    <script src="scripts/itemGenerator.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
-        body { background: #050505; color: #eee; font-family: 'VT323', monospace; overflow: hidden; }
-        .COMMON { color: #9ca3af; } .UNCOMMON { color: #4ade80; } .RARE { color: #3b82f6; }
-        .EPIC { color: #a855f7; } .LEGENDARY { color: #f59e0b; } .SET { color: #10b981; font-weight: bold; }
-    </style>
-</head>
-<body>
-    <div id="root"></div>
-    <script type="text/babel" src="scripts/EquipmentUI.js"></script>
-    <script type="text/babel">
-        const { useState } = React;
+<script type="text/babel">
+    const { useState } = React;
 
-        const App = () => {
-            const [view, setView] = useState('GAME');
-            const [stats, setStats] = useState({
-                level: 1, gold: 200, dropCount: 0,
-                STR: 10, DEX: 10, SAG: 10, VIT: 10
-            });
-            const [equipment, setEquipment] = useState({});
-            const [inventory, setInventory] = useState([]);
-            const [logs, setLogs] = useState(["Benvenuto avventuriero..."]);
+    const App = () => {
+        // ... stati esistenti ...
+        const [view, setView] = useState('GAME');
+        const [stats, setStats] = useState({ level: 1, gold: 500, dropCount: 0, STR: 10, DEX: 10 });
+        const [equipment, setEquipment] = useState({});
+        const [inventory, setInventory] = useState([]);
+        const [logs, setLogs] = useState(["Pronto alla battaglia..."]);
 
-            const dropLoot = () => {
-                const item = generateItem(stats.level);
-                setInventory(prev => [item, ...prev]);
-                
-                // LOGICA LEVEL UP OGNI 10 DROP
-                let nextDropCount = stats.dropCount + 1;
-                let nextLvl = stats.level;
-                if(nextDropCount >= 10) {
-                    nextLvl += 1;
-                    nextDropCount = 0;
-                    setLogs(prev => [`⭐ LEVEL UP! Ora sei livello ${nextLvl}`, ...prev]);
-                }
-                setStats(prev => ({...prev, dropCount: nextDropCount, level: nextLvl}));
-                setLogs(prev => [`Hai trovato: ${item.name}`, ...prev]);
-            };
-
-            const sellItem = (item) => {
-                setStats(prev => ({...prev, gold: prev.gold + item.sellPrice}));
-                setInventory(prev => prev.filter(i => i.id !== item.id));
-            };
-
-            const buyItem = (item) => {
-                const cost = item.sellPrice * 5;
-                if(stats.gold >= cost) {
-                    setStats(prev => ({...prev, gold: prev.gold - cost}));
-                    setInventory(prev => [item, ...prev]);
-                } else { alert("Oro insufficiente!"); }
-            };
-
-            const handleEquip = (item) => {
-                const old = equipment[item.slot];
-                setEquipment(prev => ({...prev, [item.slot]: item}));
-                setInventory(prev => {
-                    const filtered = prev.filter(i => i.id !== item.id);
-                    return old ? [old, ...filtered] : filtered;
-                });
-            };
-
-            return (
-                <div className="h-screen w-full flex flex-col items-center justify-center">
-                    <div className="text-yellow-600 text-lg mb-4">LOG: {logs[0]}</div>
-                    <div className="flex gap-4">
-                        <button onClick={dropLoot} className="bg-zinc-800 border-2 border-zinc-600 px-8 py-4 text-2xl active:bg-zinc-700">⚔️ COMBATTI (DROP)</button>
-                        <button onClick={() => setView('INV')} className="bg-yellow-800 border-2 border-yellow-600 px-8 py-4 text-2xl active:bg-yellow-700">🎒 ZAINO</button>
-                    </div>
-                    
-                    <div className="mt-8 text-zinc-500">Livello attuale: {stats.level} | Drop per prossimo livello: {10 - stats.dropCount}</div>
-
-                    {view === 'INV' && (
-                        <EquipmentScreen 
-                            stats={stats} equipment={equipment} inventory={inventory}
-                            onEquip={handleEquip} onSell={sellItem} onBuy={buyItem}
-                            onClose={() => setView('GAME')}
-                        />
-                    )}
-                </div>
-            );
+        // Funzione Vendi Tutto
+        const sellAllExceptFavorites = (favoritesSet) => {
+            const toSell = inventory.filter(item => !favoritesSet.has(item.id));
+            const totalGold = toSell.reduce((acc, item) => acc + item.sellPrice, 0);
+            
+            setInventory(prev => prev.filter(item => favoritesSet.has(item.id)));
+            setStats(prev => ({ ...prev, gold: prev.gold + totalGold }));
+            setLogs(prev => [`Venduti ${toSell.length} oggetti per ${totalGold}g`, ...prev]);
         };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
+        const sellItem = (item) => {
+            setInventory(prev => prev.filter(i => i.id !== item.id));
+            setStats(prev => ({ ...prev, gold: prev.gold + item.sellPrice }));
+        };
+
+        const handleEquip = (item) => {
+            const old = equipment[item.slot];
+            setEquipment(prev => ({ ...prev, [item.slot]: item }));
+            setInventory(prev => {
+                const filtered = prev.filter(i => i.id !== item.id);
+                return old ? [...filtered, old] : filtered;
+            });
+        };
+
+        // ... resto della logica dropLoot ...
+
+        return (
+            <div className="h-screen w-full flex flex-col items-center justify-center bg-zinc-950">
+                <div className="text-yellow-600 text-xl mb-4">{logs[0]}</div>
+                <div className="flex gap-4">
+                    <button onClick={dropLoot} className="bg-red-950 border-2 border-red-700 px-8 py-4 text-xl">⚔️ COMBATTI</button>
+                    <button onClick={() => setView('INV')} className="bg-zinc-800 border-2 border-zinc-600 px-8 py-4 text-xl">🎒 ZAINO</button>
+                </div>
+                
+                {view === 'INV' && (
+                    <EquipmentScreen 
+                        stats={stats} 
+                        equipment={equipment} 
+                        inventory={inventory}
+                        onEquip={handleEquip} 
+                        onSell={sellItem} 
+                        onSellAll={sellAllExceptFavorites}
+                        onClose={() => setView('GAME')}
+                    />
+                )}
+            </div>
+        );
+    };
+    // ... render ...
+</script>
